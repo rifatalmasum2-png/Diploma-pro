@@ -8,6 +8,9 @@ const AdminPage: React.FC = () => {
   const [pin, setPin] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [error, setError] = useState('');
+  
+  // Notification Server Key (Normally should be in backend, but implementing as requested for frontend control)
+  const [serverKey, setServerKey] = useState(localStorage.getItem('fcm_server_key') || '');
 
   // Form states
   const [resTitle, setResTitle] = useState('');
@@ -36,6 +39,42 @@ const AdminPage: React.FC = () => {
     }
   };
 
+  const sendPushNotification = async (title: string, message: string) => {
+    if (!serverKey) {
+      console.log("No Server Key provided. Push notification skipped.");
+      return;
+    }
+
+    try {
+      const tokensSnapshot = await getDocs(collection(db, 'fcm_tokens'));
+      const tokens: string[] = [];
+      tokensSnapshot.forEach(doc => tokens.push(doc.data().token));
+
+      if (tokens.length === 0) return;
+
+      // Send via FCM Legacy HTTP API (Simple for frontend triggers)
+      await fetch('https://fcm.googleapis.com/fcm/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `key=${serverKey}`
+        },
+        body: JSON.stringify({
+          registration_ids: tokens,
+          notification: {
+            title: title,
+            body: message,
+            click_action: window.location.origin,
+            icon: '/favicon.ico'
+          }
+        })
+      });
+      console.log("Push notification broadcasted to " + tokens.length + " devices.");
+    } catch (err) {
+      console.error("Push notification failed:", err);
+    }
+  };
+
   const handleAddResource = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resTitle || !resLink) return alert('Please fill all fields');
@@ -48,6 +87,9 @@ const AdminPage: React.FC = () => {
         pdfLink: resLink.trim(),
         createdAt: serverTimestamp()
       });
+      
+      await sendPushNotification("New Resource Available", `${resTitle} added to ${resCategory} ${resSemester}`);
+      
       alert('Resource added successfully!');
       setResTitle('');
       setResLink('');
@@ -71,6 +113,9 @@ const AdminPage: React.FC = () => {
         imageUrl: jobImg.trim() || '',
         createdAt: serverTimestamp()
       });
+      
+      await sendPushNotification("New Job Alert", jobTitle);
+      
       alert('Job update posted successfully!');
       setJobTitle('');
       setJobDesc('');
@@ -95,6 +140,9 @@ const AdminPage: React.FC = () => {
         createdAt: serverTimestamp()
       });
 
+      // Send Push Notification
+      await sendPushNotification(noticeTitle, noticeText);
+
       const noticesRef = collection(db, 'notices');
       const q = query(noticesRef, orderBy('createdAt', 'desc'));
       const snapshot = await getDocs(q);
@@ -105,7 +153,7 @@ const AdminPage: React.FC = () => {
         await Promise.all(deletePromises);
       }
 
-      alert('Notice sent successfully!');
+      alert('Notice sent and broadcasted!');
       setNoticeTitle('');
       setNoticeText('');
     } catch (err: any) {
@@ -114,6 +162,11 @@ const AdminPage: React.FC = () => {
     } finally {
       setNoticeSubmitting(false);
     }
+  };
+
+  const saveServerKey = (key: string) => {
+    setServerKey(key);
+    localStorage.setItem('fcm_server_key', key);
   };
 
   if (!isLoggedIn) {
@@ -154,6 +207,19 @@ const AdminPage: React.FC = () => {
       </div>
 
       <div className="space-y-8">
+        {/* Setup Config Section */}
+        <section className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100">
+          <h3 className="text-sm font-black text-indigo-800 mb-3 uppercase tracking-wider">Push Config (Optional)</h3>
+          <p className="text-[10px] text-indigo-600 mb-4 leading-tight font-medium">Add your Firebase Server Key to enable real-time notifications for users.</p>
+          <input 
+            type="password" 
+            className="w-full p-3 bg-white border border-indigo-200 rounded-xl text-xs" 
+            placeholder="FCM Server Key" 
+            value={serverKey} 
+            onChange={(e) => saveServerKey(e.target.value)} 
+          />
+        </section>
+
         <section className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100">
           <h3 className="text-lg font-black text-gray-800 mb-6">Post Job Opportunity</h3>
           <form onSubmit={handleAddJob} className="space-y-4">

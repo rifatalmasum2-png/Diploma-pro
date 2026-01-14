@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 import { db } from '../firebase';
 import { JobUpdate } from '../types';
 
@@ -9,117 +9,52 @@ const JobsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const jobsRef = collection(db, 'jobs');
-    
-    const unsubscribe = onSnapshot(jobsRef, (querySnapshot) => {
-      const fetchedJobs: JobUpdate[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        
-        const createdAt = data.createdAt?.toMillis ? data.createdAt.toMillis() : (typeof data.createdAt === 'number' ? data.createdAt : Date.now());
-        
-        fetchedJobs.push({ 
-          id: String(doc.id), 
-          title: String(data.title || ''),
-          description: String(data.description || ''),
-          link: data.link ? String(data.link) : undefined,
-          imageUrl: data.imageUrl ? String(data.imageUrl) : undefined,
-          createdAt: createdAt
-        });
-      });
-
-      fetchedJobs.sort((a, b) => b.createdAt - a.createdAt);
-
-      setJobs(fetchedJobs);
-      setLoading(false);
-    }, (error: any) => {
-      console.error("Jobs sync error:", error.message || "Unknown error");
+    const q = query(collection(db, 'jobs'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const fetched: JobUpdate[] = [];
+      snap.forEach(d => fetched.push({ id: d.id, ...d.data() } as JobUpdate));
+      setJobs(fetched);
       setLoading(false);
     });
-
     return () => unsubscribe();
   }, []);
 
-  const openLink = (url?: string) => {
-    if (url && url.trim() !== '') {
-      window.open(url, '_blank', 'noopener,noreferrer');
-    }
-  };
-
   return (
-    <div className="pb-24 px-4 py-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-2xl font-black text-gray-800">Job Board</h2>
-          <p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest">Available Opportunities</p>
-        </div>
+    <div className="pb-24 px-6 py-8 max-w-4xl mx-auto space-y-8">
+      <div>
+        <h2 className="text-3xl font-black text-navy-800 dark:text-white tracking-tight">জব বোর্ড</h2>
+        <p className="text-xs text-amber-500 font-bold uppercase tracking-widest mt-1">ক্যারিয়ার গড়ার সেরা সুযোগ</p>
       </div>
 
       {loading ? (
-        <div className="flex justify-center p-12">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+        <div className="flex flex-col gap-6">
+          {[1,2,3].map(i => <div key={i} className="h-48 bg-gray-200 dark:bg-navy-700 rounded-[2.5rem] animate-pulse"></div>)}
         </div>
       ) : (
-        <div className="space-y-6">
-          {jobs.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-[2rem] border border-dashed border-gray-200">
-              <i className="fas fa-briefcase text-5xl text-gray-100 mb-4"></i>
-              <p className="text-gray-400 font-bold">No jobs posted yet</p>
-            </div>
-          ) : (
-            jobs.map((job) => (
-              <div key={job.id} className="bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 border border-gray-100 overflow-hidden animate-fadeIn flex flex-col">
-                {job.imageUrl && (
-                  <div 
-                    className="relative h-48 w-full overflow-hidden bg-gray-100 cursor-pointer"
-                    onClick={() => openLink(job.link)}
-                  >
-                    <img 
-                      src={job.imageUrl} 
-                      className="w-full h-full object-cover transition-transform duration-700 hover:scale-110" 
-                      alt="Circular" 
-                      onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/600x400/f1f5f9/64748b?text=Job+Circular'; }}
-                    />
-                    <div className="absolute bottom-4 right-4 bg-blue-600 text-white px-3 py-1 rounded-lg text-[9px] font-black uppercase shadow-lg">Click to View</div>
-                  </div>
-                )}
-                <div className="p-6">
-                  <div className="flex justify-between items-start mb-3">
-                    <h3 
-                      className="text-lg font-black text-gray-800 leading-tight pr-4 cursor-pointer hover:text-blue-600 transition-colors"
-                      onClick={() => openLink(job.link)}
-                    >
-                      {job.title}
-                    </h3>
-                    <div className="shrink-0 flex items-center gap-1.5 bg-green-50 text-green-600 text-[10px] px-2.5 py-1 rounded-lg font-black uppercase">
-                      <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>Active
-                    </div>
-                  </div>
-                  
-                  <div className="bg-slate-50 rounded-2xl p-4 mb-6 border border-slate-100 cursor-pointer" onClick={() => openLink(job.link)}>
-                    <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-wrap italic">{job.description}</p>
-                  </div>
-                  
-                  <div className="flex items-center justify-between mt-auto">
-                    <div className="flex flex-col">
-                      <span className="text-[9px] text-gray-400 font-black uppercase tracking-tighter">Posted On</span>
-                      <span className="text-[10px] text-gray-500 font-bold">
-                        {new Date(job.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                    {job.link && (
-                      <button 
-                        onClick={() => openLink(job.link)}
-                        className="bg-blue-600 text-white px-7 py-3 rounded-2xl font-black text-xs uppercase shadow-xl shadow-blue-100 active:scale-95 transition-all"
-                      >
-                        Apply Now
-                      </button>
-                    )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {jobs.map((job) => (
+            <div key={job.id} className="bg-white dark:bg-navy-800 rounded-[2.5rem] shadow-xl shadow-gray-200/20 dark:shadow-none border border-gray-100 dark:border-white/5 overflow-hidden flex flex-col group">
+              {job.imageUrl && (
+                <div className="relative h-44 overflow-hidden bg-navy-50">
+                  <img src={job.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt="Job" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                  <div className="absolute bottom-4 left-4 flex items-center gap-2">
+                    <span className="bg-amber-500 text-navy-900 text-[9px] font-black px-3 py-1 rounded-full uppercase">Update</span>
                   </div>
                 </div>
+              )}
+              <div className="p-6 flex-1 flex flex-col">
+                <h3 className="text-lg font-black text-navy-800 dark:text-white leading-tight mb-3 line-clamp-2">{job.title}</h3>
+                <div className="bg-slate-50 dark:bg-navy-900 rounded-2xl p-4 mb-6 italic text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
+                  {job.description}
+                </div>
+                <div className="mt-auto flex items-center justify-between pt-4 border-t border-gray-100 dark:border-white/5">
+                  <span className="text-[10px] text-gray-400 font-black uppercase tracking-tighter">Posted {new Date(job.createdAt).toLocaleDateString()}</span>
+                  <a href={job.link} target="_blank" className="bg-navy-800 dark:bg-amber-500 dark:text-navy-900 text-white px-6 py-2.5 rounded-xl font-black text-xs uppercase shadow-lg shadow-navy-100 dark:shadow-none active:scale-95 transition-all">Apply Now</a>
+                </div>
               </div>
-            ))
-          )}
+            </div>
+          ))}
         </div>
       )}
     </div>
